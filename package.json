@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "scrape": "tsx scripts/scrape-yc.ts"
+    "scrape": "tsx scripts/scrape-yc.ts",
+    "clean": "tsx scripts/clean-data.ts",
+    "enrich": "tsx scripts/enrich-emails.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
