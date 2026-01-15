@@ -7,7 +7,7 @@ A full-stack tool that helps Engineers,VCs to connect with YC Founders without a
 Built with Next.js, Supabase, Puppeteer, Cheerio, Tailwind, shadcn/ui, and Hunter.io.
 
 <p align="center">
-  <img src="https://via.placeholder.com/1200x600/ea580c/ffffff?text=FounderDirect+-+YC+Founders+Search" alt="FounderDirect Banner" width="800"/>
+  <img src="/public/founderdirect.png" alt="FounderDirect Banner" width="800"/>
 </p>
 
 ## Features
