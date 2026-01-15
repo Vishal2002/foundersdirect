@@ -18,297 +18,250 @@ interface Founder {
 }
 
 async function scrapeYCDirectory() {
-  console.log('🚀 Starting improved YC scraper...');
-  
+  console.log('🚀 YC Companies & Founders Scraper – Clean v2');
+  console.log('Current date:', new Date().toISOString().split('T')[0]);
+  console.log('----------------------------------------');
+
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
-  
+
   const page = await browser.newPage();
-  await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
-  
+  await page.setUserAgent(
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  );
+
+  let totalCompanies = 0;
+  let successful = 0;
+  let totalFounders = 0;
+
   try {
-    console.log('📄 Loading YC directory...');
-    await page.goto('https://www.ycombinator.com/companies', {
-      waitUntil: 'networkidle2',
-      timeout: 60000
+    // Go to newest companies
+    const startUrl = 'https://www.ycombinator.com/companies?sort=created_desc';
+    console.log(`→ Loading directory: ${startUrl}`);
+    await page.goto(startUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+
+    await page.waitForSelector('a[href*="/companies/"]', { timeout: 45000 });
+
+    // Get unique company detail page URLs
+    const companyUrls = await page.evaluate(() => {
+      const anchors = Array.from(document.querySelectorAll('a[href*="/companies/"]'));
+      const urls = anchors
+        .map(a => (a as HTMLAnchorElement).href)
+        .filter(href => /\/companies\/[a-z0-9-]+$/i.test(href));
+      return [...new Set(urls)].slice(0, 80); // limit to avoid long runs
     });
-    
-    await page.waitForSelector('a[href*="/companies/"]', { timeout: 30000 });
-    
-    // Scroll to load companies
-    console.log('📜 Scrolling to load companies...');
-    await autoScroll(page);
-    
-    // Get company links
-    const companyLinks = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a[href*="/companies/"]'));
-      return links
-        .map(link => (link as HTMLAnchorElement).href)
-        .filter(href => href.match(/\/companies\/[a-z0-9-]+$/))
-        .filter((href, index, self) => self.indexOf(href) === index);
-    });
-    
-    console.log(`✅ Found ${companyLinks.length} companies\n`);
-    
-    // Process each company
-    let processedCount = 0;
-    const totalToProcess = Math.min(200, companyLinks.length); // Process 200 companies
-    
-    for (const link of companyLinks.slice(0, totalToProcess)) {
+
+    totalCompanies = companyUrls.length;
+    console.log(`→ Found ${totalCompanies} unique companies to scrape`);
+
+    for (let i = 0; i < companyUrls.length; i++) {
+      const url = companyUrls[i];
+      console.log(`\n[${i + 1}/${totalCompanies}] ${url.split('/').pop()}`);
+
       try {
-        console.log(`[${++processedCount}/${totalToProcess}] ${link}`);
-        await scrapeCompanyPage(page, link);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      } catch (error) {
-        console.error(`❌ Error: ${error}`);
+        const result = await scrapeCompany(page, url);
+        if (result.success) {
+          successful++;
+          totalFounders += result.foundersSaved;
+        }
+      } catch (err: any) {
+        console.error(`   Failed: ${err.message}`);
       }
+
+      // Polite delay
+      await new Promise(r => setTimeout(r, 3500));
     }
-    
-  } catch (error) {
-    console.error('❌ Fatal error:', error);
+
+  } catch (fatal) {
+    console.error('Critical failure:', fatal);
   } finally {
     await browser.close();
-    console.log('\n🎉 Scraping complete!');
+
+    console.log('\n' + '='.repeat(50));
+    console.log('Summary');
+    console.log('  Companies processed :', totalCompanies);
+    console.log('  Successfully scraped :', successful);
+    console.log('  Total founders      :', totalFounders);
+    console.log('='.repeat(50));
+    console.log('Finished at', new Date().toLocaleString());
   }
 }
 
-async function scrapeCompanyPage(page: any, url: string) {
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-  
+async function scrapeCompany(page: any, url: string) {
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
   const html = await page.content();
   const $ = cheerio.load(html);
-  
-  // Extract company info
-  const companyName = $('h1').first().text().trim();
-  
-  // Get batch from various locations
+
+  const companyName = $('h1').first().text().trim() || 'Unknown Company';
+
+  // ─── Batch ───────────────────────────────────────────────────────
   let batch = 'Unknown';
-  
-  // Try to find batch in the page
-  $('div, span, a').each((_, el) => {
-    const text = $(el).text().trim();
-    const batchMatch = text.match(/\b([WS]\d{2})\b/);
-    if (batchMatch && !batch.includes('W') && !batch.includes('S')) {
-      batch = batchMatch[1];
+
+  // 1. Key-value pair "Batch:"
+  $('div.flex.flex-row.justify-between, div.flex.flex-row').each((_, el) => {
+    const text = $(el).text().toLowerCase();
+    if (text.includes('batch:')) {
+      const value = $(el).find('span:last-child, div:last-child').text().trim();
+      if (value && value !== 'Batch') {
+        batch = value;
+        return false;
+      }
     }
   });
-  
-  // Get description
-  const description = $('div.prose').first().text().trim() ||
-                     $('meta[property="og:description"]').attr('content') || '';
-  
-  // Get location
-  let location = '';
-  $('div, span').each((_, el) => {
-    const text = $(el).text().trim();
-    if (text.includes('📍') || text.includes('Location')) {
-      location = text.replace('📍', '').replace('Location:', '').trim();
+
+  // 2. Pill with year or W/S format
+  if (batch === 'Unknown') {
+    $('.yc-tw-Pill').each((_, pill) => {
+      const t = $(pill).text().trim();
+      if (t.match(/\b(20\d{2}|W\d{2}|S\d{2}|Winter|Summer)\b/i)) {
+        batch = t;
+        return false;
+      }
+    });
+  }
+
+  // 3. Broad fallback regex
+  if (batch === 'Unknown') {
+    const bodyText = $('body').text();
+    const full = bodyText.match(/(Winter|Summer)\s*(\d{4})/i);
+    if (full) {
+      batch = `${full[1]} ${full[2]}`;
+    } else {
+      const short = bodyText.match(/\b([WS])(\d{2})\b/i);
+      if (short) {
+        batch = `${short[1] === 'W' ? 'Winter' : 'Summer'} 20${short[2]}`;
+      }
     }
-  });
-  
-  // Get tags/industry
-  const tags: string[] = [];
-  $('a[href*="/companies?tags="]').each((_, el) => {
-    const tag = $(el).text().trim();
-    if (tag && !tags.includes(tag)) {
-      tags.push(tag);
-    }
-  });
-  const industry = tags.slice(0, 3).join(', ');
-  
-  console.log(`   📦 ${companyName} (${batch})`);
-  
-  // Extract founders from "Active Founders" section
+  }
+
+  // ─── Website ─────────────────────────────────────────────────────
+  let companyUrl = url; // fallback
+  //@ts-ignore
+  const siteLink = $('a[href^="http"][target="_blank"]').filter((_, el) => {
+    const txt = $(el).text().trim();
+    return txt.includes('http') || txt.includes('.') || txt.match(/\.(ai|com|io|co)$/i);
+  }).first().attr('href');
+
+  if (siteLink && !siteLink.includes('ycombinator')) {
+    companyUrl = siteLink.trim();
+  }
+
+  console.log(`   ${companyName} • ${batch}`);
+  console.log(`   ${companyUrl}`);
+
+  // ─── Founders ────────────────────────────────────────────────────
   const founders: Founder[] = [];
-  
-  // Look for the "Active Founders" section
-  const foundersSection = $('div.prose:contains("Active Founders")').parent();
-  
-  if (foundersSection.length > 0) {
-    // Find all founder cards within this section
-    foundersSection.find('.ycdc-card-new').each((_, card) => {
-      const $card = $(card);
-      
-      // Extract avatar
-      const avatarUrl = $card.find('img').first().attr('src');
-      
-      // Extract name
-      const nameEl = $card.find('.font-bold').first();
-      const name = nameEl.text().trim();
-      
-      // Skip if name is empty or looks invalid
-      if (!name || name.length < 3 || name.includes('Active Founders')) {
-        return;
-      }
-      
-      // Extract role
-      const roleEl = $card.find('.text-gray-600').first();
-      let role = roleEl.text().trim();
-      if (!role) {
-        role = 'Founder';
-      }
-      
-      // Extract bio
-      const bioEl = $card.find('.prose.max-w-full');
-      const bio = bioEl.text().trim();
-      
-      // Extract Twitter
-      let twitter_handle = '';
-      const twitterLink = $card.find('a[href*="twitter.com"], a[href*="x.com"]').attr('href');
-      if (twitterLink) {
-        const match = twitterLink.match(/(?:twitter\.com|x\.com)\/([^/?]+)/);
-        if (match) twitter_handle = match[1];
-      }
-      
-      // Extract LinkedIn
-      const linkedin_url = $card.find('a[href*="linkedin.com"]').attr('href') || '';
-      
-      founders.push({
-        name,
-        role,
-        bio: bio.substring(0, 500),
-        twitter_handle,
-        linkedin_url,
-        avatar_url: avatarUrl && avatarUrl.startsWith('http') ? avatarUrl.split('?')[0] : undefined,
-      });
-      
-      console.log(`   👤 ${name} - ${role}`);
-      if (twitter_handle) console.log(`      🐦 @${twitter_handle}`);
-      if (linkedin_url) console.log(`      💼 LinkedIn`);
-    });
-  } else {
-    // Fallback: try other methods
-    console.log(`   ⚠️  No "Active Founders" section found, trying fallback...`);
-    
-    // Look for founder info in team section or anywhere on the page
-    $('.font-bold').each((_, el) => {
-      const $el = $(el);
-      const name = $el.text().trim();
-      
-      // Validate name
-      if (!name || 
-          name.length < 3 || 
-          name.length > 50 ||
-          name.includes('Active') ||
-          name.includes('Team') ||
-          name.includes('Founders') ||
-          /\d{4}/.test(name)) {
-        return;
-      }
-      
-      // Check if this is likely a person's name (has at least 2 words)
-      if (name.split(' ').length < 2) return;
-      
-      const $container = $el.closest('div').parent();
-      
-      let role = 'Founder';
-      $container.find('.text-gray-600').each((_, roleEl) => {
-        const roleText = $(roleEl).text().trim();
-        if (roleText && roleText.length < 50) {
-          role = roleText;
-        }
-      });
-      
-      const twitter_handle = $container.find('a[href*="twitter.com"], a[href*="x.com"]').attr('href')?.match(/(?:twitter\.com|x\.com)\/([^/?]+)/)?.[1] || '';
-      const linkedin_url = $container.find('a[href*="linkedin.com"]').attr('href') || '';
-      const avatar_url = $container.find('img').first().attr('src')?.split('?')[0];
-      
-      // Check if we already have this founder
-      if (!founders.some(f => f.name === name)) {
-        founders.push({
-          name,
-          role,
-          twitter_handle,
-          linkedin_url,
-          avatar_url: avatar_url && avatar_url.startsWith('http') ? avatar_url : undefined,
-        });
-        
-        console.log(`   👤 ${name} - ${role}`);
-      }
-    });
+
+  $('.ycdc-card-new, .ycdc-card').each((_, cardEl) => {
+    const $card = $(cardEl);
+
+    // Name from alt (most reliable)
+    let name = $card.find('img').first().attr('alt')?.trim() || '';
+
+    // Fallback to bold text
+    if (!name) {
+      name = $card.find('.font-bold, [class*="bold"]').first().text().trim();
+    }
+
+    if (!name || name.length < 4 || name.toLowerCase() === companyName.toLowerCase()) {
+      return;
+    }
+
+    if (name.split(/\s+/).length < 2) return; // need first + last
+
+    const role = $card.find('.text-gray-600').first().text().trim() || 'Founder';
+
+    const bio = $card.find('.prose .whitespace-pre-line').first().text().trim().slice(0, 500) || undefined;
+
+    const avatar_url = $card.find('img').first().attr('src')?.split('?')[0] || undefined;
+
+    let linkedin_url = $card.find('a[href*="linkedin.com/in"]').attr('href') || undefined;
+
+    let twitter_handle = '';
+const socialLinks = $card.find('a[href*="twitter.com"], a[href*="x.com"]');
+if (socialLinks.length > 0) {
+  const href = socialLinks.first().attr('href') || '';
+  // Extract username from end of URL
+  const match = href.match(/\/([^/?#]+)\/?$/);
+  if (match && match[1] !== 'intent' && match[1] !== 'share') {  // avoid fake links
+    twitter_handle = match[1];
   }
-  
-  // Save to database
-  if (founders.length > 0) {
-    for (const founder of founders) {
-      try {
-        // Check if founder already exists
-        const { data: existing } = await supabase
-          .from('founders')
-          .select('id')
-          .eq('name', founder.name)
-          .eq('company', companyName)
-          .single();
-        
-        if (existing) {
-          // Update existing
-          await supabase
-            .from('founders')
-            .update({
-              role: founder.role,
-              bio: founder.bio,
-              twitter_handle: founder.twitter_handle || undefined,
-              linkedin_url: founder.linkedin_url || undefined,
-              avatar_url: founder.avatar_url || undefined,
-              batch: batch,
-              company_description: description.substring(0, 500),
-              industry: industry,
-              location: location,
-            })
-            .eq('id', existing.id);
-          
-          console.log(`   ✏️  Updated: ${founder.name}`);
-        } else {
-          // Insert new
-          const { error } = await supabase.from('founders').insert({
-            name: founder.name,
-            company: companyName,
-            batch: batch,
-            role: founder.role,
-            bio: founder.bio,
-            twitter_handle: founder.twitter_handle || undefined,
-            linkedin_url: founder.linkedin_url || undefined,
-            avatar_url: founder.avatar_url || undefined,
-            company_url: url,
-            company_description: description.substring(0, 500),
-            industry: industry,
-            location: location,
-          });
-          
-          if (error) {
-            console.error(`   ❌ Error saving ${founder.name}:`, error.message);
-          } else {
-            console.log(`   ✅ Saved: ${founder.name}`);
-          }
-        }
-      } catch (err) {
-        console.error(`   ❌ Error processing ${founder.name}:`, err);
+}
+
+// Alternative: if icon-based, look for class or data-tooltip with Twitter
+if (!twitter_handle) {
+  const twitterIcon = $card.find('[data-tooltip-content*="Twitter"], [aria-label*="Twitter"], .bg-image-twitter, [class*="twitter"]');
+  if (twitterIcon.length) {
+    const parentA = twitterIcon.closest('a');
+    if (parentA.length) {
+      const href = parentA.attr('href') || '';
+      const match = href.match(/\/([^/?#]+)\/?$/);
+      if (match) twitter_handle = match[1];
+    }
+  }
+}
+
+    founders.push({
+      name,
+      role,
+      bio,
+      twitter_handle: twitter_handle || undefined,
+      linkedin_url,
+      avatar_url,
+    });
+
+    console.log(`     → ${name} (${role})`);
+  });
+
+  if (founders.length === 0) {
+    console.log('     No founders found');
+    return { success: false, foundersSaved: 0 };
+  }
+
+  // ─── Save ────────────────────────────────────────────────────────
+  let saved = 0;
+
+  for (const founder of founders) {
+    const { data: record } = await supabase
+      .from('founders')
+      .select('id')
+      .eq('name', founder.name)
+      .eq('company', companyName)
+      .maybeSingle();
+
+    const data = {
+      name: founder.name,
+      company: companyName,
+      batch,
+      role: founder.role,
+      bio: founder.bio || null,
+      twitter_handle: founder.twitter_handle || null,
+      linkedin_url: founder.linkedin_url || null,
+      avatar_url: founder.avatar_url || null,
+      company_url: companyUrl,
+      company_description: $('div.prose.max-w-full.whitespace-pre-line').first().text().trim().slice(0, 800) || null,
+    };
+
+    if (record) {
+      await supabase.from('founders').update(data).eq('id', record.id);
+      console.log(`     Updated: ${founder.name}`);
+    } else {
+      const { error } = await supabase.from('founders').insert(data);
+      if (!error) {
+        console.log(`     Saved: ${founder.name}`);
+        saved++;
+      } else {
+        console.error(`     DB error: ${error.message}`);
       }
     }
-  } else {
-    console.log(`   ⚠️  No founders found`);
   }
+
+  return { success: true, foundersSaved: saved };
 }
 
-async function autoScroll(page: any) {
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve) => {
-      let totalHeight = 0;
-      const distance = 100;
-      const timer = setInterval(() => {
-        const scrollHeight = document.body.scrollHeight;
-        window.scrollBy(0, distance);
-        totalHeight += distance;
-
-        if (totalHeight >= scrollHeight) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 100);
-    });
-  });
-}
-
-scrapeYCDirectory().catch(console.error);
+scrapeYCDirectory().catch(err => {
+  console.error('Script crashed:', err);
+  process.exit(1);
+});

@@ -102,7 +102,7 @@ export default function FounderCard({ founder }: { founder: Founder }) {
           )}
 
 {founder.email && (
-  <div className="flex gap-1 items-center">
+  <div className="flex gap-1 items-center mb-2">
     <Button variant="default" size="sm" asChild className="bg-orange-600 hover:bg-orange-700">
       <a href={`mailto:${founder.email}`}>
         <Mail className="mr-2 h-4 w-4" />
@@ -139,29 +139,7 @@ export default function FounderCard({ founder }: { founder: Founder }) {
 )}
 
           {/* Contact Buttons */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {founder.email && (
-              <div className="flex gap-1">
-                <Button variant="default" size="sm" asChild className="bg-orange-600 hover:bg-orange-700">
-                  <a href={`mailto:${founder.email}`}>
-                    <Mail className="mr-2 h-4 w-4" />
-                    {founder.email}
-                  </a>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={copyEmail}
-                  className="px-2"
-                >
-                  {copiedEmail ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            )}
+          <div className="flex flex-wrap gap-2 mb-5">
             
             {founder.twitter_handle && (
               <Button variant="outline" size="sm" asChild>
