@@ -13,8 +13,30 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FounderDirect",
-  description: "Instant access to contact info for thousands of Y Combinator founders",
+  title: 'FounderDirect',
+  description: 'Instant access to contact info for YC founders',
+  openGraph: {
+    title: 'FounderDirect',
+    description: 'Instant access to contact info for YC founders',
+    url: 'https://founderdirect.vercel.app/',
+    siteName: 'FounderDirect',
+    images: [
+      {
+        url: '/og.png',
+        width: 1200,
+        height: 630,
+        alt: 'FounderDirect Open Graph Image',
+      },
+    ],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'FounderDirect',
+    description: 'Instant access to contact info for YC founders',
+    images: ['/og.png'],
+  },
+
 };
 
 export default function RootLayout({
