@@ -52,7 +52,7 @@ export default function Home() {
               Connect with YC Founders
             </h2>
             <p className="text-xl text-gray-600">
-              Instant access to contact info for thousands of Y Combinator founders
+              Instant access to contact info of Y Combinator founders
             </p>
           </div>
 
@@ -61,7 +61,7 @@ export default function Home() {
             <div className="flex gap-2">
               <Input
                 type="text"
-                placeholder="Search by name, company, or batch (e.g., 'Airbnb', 'W21', 'Brian Chesky')"
+                placeholder="Search by name, company, or batch (e.g., 'Airbnb', 'Summer 2007', 'Brian Chesky')"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="text-lg h-14"
