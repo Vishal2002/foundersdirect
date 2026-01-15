@@ -117,7 +117,7 @@ export default function Home() {
             <div className="mt-12">
               <p className="text-sm text-gray-500 mb-3">Try searching for:</p>
               <div className="flex flex-wrap gap-2">
-                {['Airbnb', 'Stripe', 'W24', 'Dropbox', 'Patrick Collison'].map((example) => (
+                {['Airbnb', 'Instacart', 'Summer 2020', 'Dropbox', 'Apoorva Mehta'].map((example) => (
                   <Button
                     key={example}
                     variant="outline"
