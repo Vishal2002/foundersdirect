@@ -12,7 +12,7 @@ Built with Next.js, Supabase, Puppeteer, Cheerio, Tailwind, shadcn/ui, and Hunte
 
 ## Features
 
-- Scrapes latest YC companies & founders using Puppeteer + Cheerio
+- Scrapes latest YC companies & founders.
 - Reliably extracts **real company website** (not just YC directory link)
 - Enriches founders with emails using Hunter.io (high-confidence) + pattern-based fallbacks
 - Beautiful FounderCard component with:
@@ -25,10 +25,10 @@ Built with Next.js, Supabase, Puppeteer, Cheerio, Tailwind, shadcn/ui, and Hunte
 
 ## Tech Stack
 
-- **Frontend** — Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, lucide-react
+- **Frontend** — Next.js 16 (App Router), TypeScript, Tailwind CSS, shadcn/ui, lucide-react
 - **Backend / Scraping** — Node.js, Puppeteer, Cheerio
 - **Database** — Supabase (PostgreSQL)
-- **Email Enrichment** — Hunter.io API
+- **Email Enrichment** — Hunter.io API + Smart Fallbacks
 - **Fonts** — Geist Sans + Geist Mono (Vercel)
 
 ## Project Structure
@@ -57,16 +57,10 @@ foundersdirect/
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 18+
-- Supabase project (free tier is enough)
-- Hunter.io API key (free tier: 25–50 requests/month)
-
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/[your-username]/founderdirect.git
+git clone https://github.com/Vishal2002/founderdirect.git
 cd founderdirect
 ```
 
@@ -129,4 +123,4 @@ Contributions welcome!
 MIT License
 
 Made with ❤️ by [Vishal Sharma](https://x.com/sharma_188)  
-Surat, Gujarat – January 2026
+
